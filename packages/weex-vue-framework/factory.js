@@ -734,6 +734,7 @@ Dep.prototype.notify = function notify () {
 Dep.target = null;
 var targetStack = [];
 
+//将当前watch指向Dep.target //target => watch
 function pushTarget (target) {
   targetStack.push(target);
   Dep.target = target;
@@ -2093,7 +2094,7 @@ function traverse (val) {
   _traverse(val, seenObjects);
   seenObjects.clear();
 }
-
+//如果deep是true，会遍历数组或对象中的每一项，将他添加到object.defineProperty的依赖中去
 function _traverse (val, seen) {
   var i, keys;
   var isA = Array.isArray(val);
@@ -3168,7 +3169,7 @@ function initVirtualComponent (options) {
   initLifecycle(vm);
   initEvents(vm);
   initRender(vm);
-  callHook(vm, 'beforeCreate');
+  callHook(vm, 'beforeCreate');//执行beforeCreate
   initInjections(vm); // resolve injections before data/props
   initState(vm);
   initProvide(vm); // resolve provide after data/props
@@ -4607,6 +4608,10 @@ var uid$2 = 0;
  * and fires callback when the expression value changes.
  * This is used for both the $watch() api and directives.
  */
+/**     vm,
+        getter || noop,//getter 是计算机属性中函数
+        noop,
+        computedWatcherOptions // {lazy:true},给这个watc传 */
 var Watcher = function Watcher (
   vm,
   expOrFn,
@@ -4627,6 +4632,7 @@ var Watcher = function Watcher (
     this.sync = !!options.sync;
     this.before = options.before;
   } else {
+    //this.deep 深度遍历渲染默认为false
     this.deep = this.user = this.lazy = this.sync = false;
   }
   this.cb = cb;
@@ -4657,17 +4663,19 @@ var Watcher = function Watcher (
   }
   this.value = this.lazy
     ? undefined
-    : this.get();
+    : this.get();//get方法获取值会走到每一个定义属性的getter中去，object.defineProperty
 };
 
 /**
  * Evaluate the getter, and re-collect dependencies.
  */
 Watcher.prototype.get = function get () {
+
   pushTarget(this);
   var value;
   var vm = this.vm;
   try {
+    //getter是一个函数，在计算机属性中是每一个属性对应的函数，执行他就可以得到对应的值
     value = this.getter.call(vm, vm);
   } catch (e) {
     if (this.user) {
@@ -4678,6 +4686,7 @@ Watcher.prototype.get = function get () {
   } finally {
     // "touch" every property so they are all tracked as
     // dependencies for deep watching
+    //如果对象是需要深度监听
     if (this.deep) {
       traverse(value);
     }
@@ -4954,6 +4963,7 @@ function initComputed (vm, computed) {
   // computed properties are just getters during SSR
   var isSSR = isServerRendering();
 
+  //循环遍历computed中的数据
   for (var key in computed) {
     var userDef = computed[key];
     var getter = typeof userDef === 'function' ? userDef : userDef.get;
@@ -4965,12 +4975,13 @@ function initComputed (vm, computed) {
     }
 
     if (!isSSR) {
+      //如果不是服务端渲染
       // create internal watcher for the computed property.
       watchers[key] = new Watcher(
         vm,
-        getter || noop,
+        getter || noop,//getter 是计算机属性中函数
         noop,
-        computedWatcherOptions
+        computedWatcherOptions // {lazy:true},给这个watc传递了一个lazy：true属性，表示计算机属性可以缓存
       );
     }
 
@@ -4994,8 +5005,11 @@ function defineComputed (
   key,
   userDef
 ) {
+  //userDef 为用户自己写的computed对应的函数
+  //判断是否是服务端渲染
   var shouldCache = !isServerRendering();
   if (typeof userDef === 'function') {
+    //最开始 sharedPropertyDefinition.get 是一个空函数
     sharedPropertyDefinition.get = shouldCache
       ? createComputedGetter(key)
       : createGetterInvoker(userDef);
@@ -5017,6 +5031,7 @@ function defineComputed (
       );
     };
   }
+  //将当前计算机属性的值定义到当前的vue实例上面，像data一样
   Object.defineProperty(target, key, sharedPropertyDefinition);
 }
 
@@ -5024,12 +5039,15 @@ function createComputedGetter (key) {
   return function computedGetter () {
     var watcher = this._computedWatchers && this._computedWatchers[key];
     if (watcher) {
+      //刚开始这个dirty是true
       if (watcher.dirty) {
+        //evaluate 会将dirty变为false
         watcher.evaluate();
       }
       if (Dep.target) {
         watcher.depend();
       }
+      //dirty为false会直接返回之前的值
       return watcher.value
     }
   }
